@@ -1,0 +1,52 @@
+name: Auto Sync Upstream
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    # 每天 UTC 00:00 (北京时间早上 08:00) 自动检查并同步
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    name: Sync with upstream morluto/rea
+    runs-on: ubuntu-latest
+    if: github.repository == 'Ranko-sama/rea'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync upstream and preserve workflow
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 备份当前的 sync.yml
+          cp .github/workflows/sync.yml /tmp/sync.yml
+
+          # 添加上游仓库并获取最新分支及标签
+          git remote add upstream https://github.com/morluto/rea.git
+          git fetch upstream main --tags
+
+          # 检查上游是否有新更新
+          UPSTREAM_COMMIT=$(git rev-parse upstream/main)
+          if git merge-base --is-ancestor "$UPSTREAM_COMMIT" HEAD; then
+            echo "Already up to date with upstream/main."
+          else
+            echo "New upstream changes detected. Syncing..."
+            git checkout main
+            git reset --hard upstream/main
+            mkdir -p .github/workflows
+            cp /tmp/sync.yml .github/workflows/sync.yml
+            git add .github/workflows/sync.yml
+            git commit -m "ci: sync upstream and preserve sync workflow"
+            git push origin main --force
+          fi
+
+          # 同步上游 Release tags
+          git push origin --tags --force
