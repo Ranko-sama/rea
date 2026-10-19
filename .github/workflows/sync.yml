@@ -16,37 +16,22 @@ jobs:
     if: github.repository == 'Ranko-sama/rea'
 
     steps:
+      - name: Sync with upstream via GitHub API
+        run: |
+          echo "Triggering upstream merge via GitHub API..."
+          response=$(gh api --method POST "repos/${{ github.repository }}/merge-upstream" \
+            -f branch="main")
+          echo "$response"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
-      - name: Sync upstream and preserve workflow
+      - name: Sync upstream tags
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
-          # 备份当前的 sync.yml
-          cp .github/workflows/sync.yml /tmp/sync.yml
-
-          # 添加上游仓库并获取最新分支及标签
           git remote add upstream https://github.com/morluto/rea.git
-          git fetch upstream main --tags
-
-          # 检查上游是否有新更新
-          UPSTREAM_COMMIT=$(git rev-parse upstream/main)
-          if git merge-base --is-ancestor "$UPSTREAM_COMMIT" HEAD; then
-            echo "Already up to date with upstream/main."
-          else
-            echo "New upstream changes detected. Syncing..."
-            git checkout main
-            git reset --hard upstream/main
-            mkdir -p .github/workflows
-            cp /tmp/sync.yml .github/workflows/sync.yml
-            git add .github/workflows/sync.yml
-            git commit -m "ci: sync upstream and preserve sync workflow"
-            git push origin main --force
-          fi
-
-          # 同步上游 Release tags
-          git push origin --tags --force
+          git fetch upstream --tags
+          git push origin --tags || echo "Tags sync completed or skipped."
